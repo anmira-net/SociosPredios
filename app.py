@@ -1581,29 +1581,32 @@ elif tab_seleccionada == "📈 Dashboard y Estadísticas":
         finally:
             conn.close()
 # =========================================================
-        # SECCIÓN DE EXPORTACIÓN GENERAL A EXCEL POR PERIODO
+        # SECCIÓN DE EXPORTACIÓN GENERAL A EXCEL POR RANGO DE FECHAS
         # =========================================================
         st.markdown("---")
         st.subheader("📊 Exportación General de Saldos y Pagos (Excel)")
-        st.caption("Genere y descargue reportes generales o detallados mes a mes por socio y predio.")
+        st.caption("Genere y descargue reportes generales o detallados seleccionando un rango personalizado de fechas (ej. Enero 2025 a Diciembre 2026).")
 
-        with st.form("form_export_excel"):
-            col_ex1, col_ex2, col_ex3 = st.columns([1, 1, 1.5])
-            
-            anio_ex = col_ex1.number_input("Año de Ejercicio:", min_value=2020, max_value=2030, value=2025, key="ni_anio_ex")
-            
-            MESES_OPCIONES = {0: "Todos los Meses"}
-            MESES_OPCIONES.update({
-                1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
-                5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
-                9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
-            })
-            mes_ex = col_ex2.selectbox("Filtrar Mes:", options=list(MESES_OPCIONES.keys()), format_func=lambda x: MESES_OPCIONES[x], key="sb_mes_ex")
+        MESES_NOMBRES = {
+            1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+            5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+            9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+        }
 
-            tipo_reporte = col_ex3.radio(
+        with st.form("form_export_excel_rango"):
+            st.markdown("##### 📅 Selecciona el Rango de Periodo a Consultar")
+            col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+            
+            mes_inicio = col_r1.selectbox("Mes Inicio:", options=list(MESES_NOMBRES.keys()), format_func=lambda x: MESES_NOMBRES[x], index=0, key="sb_mes_ini_ex")
+            anio_inicio = col_r2.number_input("Año Inicio:", min_value=2020, max_value=2030, value=2025, key="ni_anio_ini_ex")
+            
+            mes_fin = col_r3.selectbox("Mes Fin:", options=list(MESES_NOMBRES.keys()), format_func=lambda x: MESES_NOMBRES[x], index=11, key="sb_mes_fin_ex")
+            anio_fin = col_r4.number_input("Año Fin:", min_value=2020, max_value=2030, value=2026, key="ni_anio_fin_ex")
+
+            tipo_reporte = st.radio(
                 "Tipo de Reporte a Generar:",
-                options=["📋 Resumido (Totales por Predio)", "🗓️ Detallado Mes a Mes (Matriz Ene-Dic)"],
-                key="rb_tipo_rep"
+                options=["📋 Resumido (Totales por Predio en el Rango)", "🗓️ Detallado Mes a Mes (Matriz Completa del Rango)"],
+                key="rb_tipo_rep_rango"
             )
 
             btn_generar_excel = st.form_submit_button("📁 Generar y Descargar Reporte Excel", use_container_width=True)
@@ -1614,283 +1617,289 @@ elif tab_seleccionada == "📈 Dashboard y Estadísticas":
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             from openpyxl.utils import get_column_letter
 
-            MESES_NOMBRES = {
-                1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
-                5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
-                9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
-            }
+            # Validar que el periodo inicial sea menor o igual al final
+            periodo_inicial_num = (anio_inicio * 100) + mes_inicio
+            periodo_final_num = (anio_fin * 100) + mes_fin
 
-            conn = get_connection()
-            try:
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                
-                # Estilos generales
-                fill_header = PatternFill(start_color="0D3B66", end_color="0D3B66", fill_type="solid")
-                font_header = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-                
-                fill_title = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-                font_title = Font(name="Calibri", size=14, bold=True, color="0D3B66")
-                
-                fill_zebra = PatternFill(start_color="F9FAFB", end_color="F9FAFB", fill_type="solid")
-                font_data = Font(name="Calibri", size=11, color="333333")
-                
-                font_total = Font(name="Calibri", size=11, bold=True, color="0D3B66")
-                fill_total = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
-
-                fill_pagado = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
-                font_pagado = Font(name="Calibri", size=11, color="2E7D32", bold=True)
-
-                border_thin = Border(
-                    left=Side(style='thin', color='DDDDDD'),
-                    right=Side(style='thin', color='DDDDDD'),
-                    top=Side(style='thin', color='DDDDDD'),
-                    bottom=Side(style='thin', color='DDDDDD')
-                )
-
-                # =========================================================
-                # OPCIÓN 1: REPORTE RESUMIDO (TOTALES POR PREDIO)
-                # =========================================================
-                if "Resumido" in tipo_reporte:
-                    ws.title = "Resumen de Pagos"
+            if periodo_inicial_num > periodo_final_num:
+                st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
+            else:
+                conn = get_connection()
+                try:
+                    wb = openpyxl.Workbook()
+                    ws = wb.active
                     
-                    with conn.cursor() as cursor:
-                        sql_ex = """
-                            SELECT 
-                                IFNULL(s.no_socio, 'S/C') as no_socio,
-                                s.nombre_completo as socio,
-                                IFNULL(s.telefono, 'Sin Teléfono') as telefono,
-                                l.comunidad,
-                                l.estado,
-                                p.num_predio,
-                                COUNT(pg.id) as cuotas_pagadas,
-                                IFNULL(SUM(pg.monto_pagado), 0) as total_monto
-                            FROM socios s
-                            JOIN predios p ON s.id = p.socio_id
-                            JOIN localidades l ON p.localidad_id = l.id
-                            LEFT JOIN pagos pg ON p.id = pg.predio_id AND pg.anio = %s
-                        """
-                        params = [anio_ex]
-                        if mes_ex > 0:
-                            sql_ex += " AND pg.mes = %s "
-                            params.append(mes_ex)
+                    # Estilos corporativos
+                    fill_header = PatternFill(start_color="0D3B66", end_color="0D3B66", fill_type="solid")
+                    font_header = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+                    
+                    fill_title = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+                    font_title = Font(name="Calibri", size=14, bold=True, color="0D3B66")
+                    
+                    fill_zebra = PatternFill(start_color="F9FAFB", end_color="F9FAFB", fill_type="solid")
+                    font_data = Font(name="Calibri", size=11, color="333333")
+                    
+                    font_total = Font(name="Calibri", size=11, bold=True, color="0D3B66")
+                    fill_total = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
 
-                        sql_ex += """
-                            GROUP BY s.id, s.no_socio, s.nombre_completo, s.telefono, l.comunidad, l.estado, p.id, p.num_predio
-                            ORDER BY s.nombre_completo ASC, p.num_predio ASC
-                        """
-                        cursor.execute(sql_ex, params)
-                        rows_export = cursor.fetchall()
+                    fill_pagado = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+                    font_pagado = Font(name="Calibri", size=11, color="2E7D32", bold=True)
 
-                    if rows_export:
-                        ws.merge_cells("A1:H1")
-                        ws["A1"] = "ANMIRA - REPORTES DE CONTROL DE CUOTAS Y PREDIOS (RESUMIDO)"
-                        ws["A1"].font = font_title
-                        ws["A1"].fill = fill_title
+                    border_thin = Border(
+                        left=Side(style='thin', color='DDDDDD'),
+                        right=Side(style='thin', color='DDDDDD'),
+                        top=Side(style='thin', color='DDDDDD'),
+                        bottom=Side(style='thin', color='DDDDDD')
+                    )
 
-                        periodo_str = f"Año Ejercicio: {anio_ex}" + (f" | Mes: {MESES_OPCIONES[mes_ex]}" if mes_ex > 0 else " | Todos los Meses")
-                        ws.merge_cells("A2:H2")
-                        ws["A2"] = f"Periodo Consultado: {periodo_str} — Fecha Emisión: {datetime.now().strftime('%d/%m/%Y %H:%M hrs')}"
-                        ws["A2"].font = Font(name="Calibri", size=10, italic=True, color="666666")
+                    rango_texto = f"{MESES_NOMBRES[mes_inicio]} {anio_inicio} a {MESES_NOMBRES[mes_fin]} {anio_fin}"
 
-                        headers = ["Clave Socio", "Nombre del Socio", "Teléfono", "Ubicación / Comunidad", "Estado", "Número Predio", "Cuotas Pagadas", "Total Pagado ($)"]
-                        ws.append([])
-                        ws.append(headers)
+                    # =========================================================
+                    # OPCIÓN 1: REPORTE RESUMIDO POR RANGO DE FECHAS
+                    # =========================================================
+                    if "Resumido" in tipo_reporte:
+                        ws.title = "Resumen de Pagos"
+                        
+                        with conn.cursor() as cursor:
+                            sql_ex = """
+                                SELECT 
+                                    IFNULL(s.no_socio, 'S/C') as no_socio,
+                                    s.nombre_completo as socio,
+                                    IFNULL(s.telefono, 'Sin Teléfono') as telefono,
+                                    l.comunidad,
+                                    l.estado,
+                                    p.num_predio,
+                                    COUNT(pg.id) as cuotas_pagadas,
+                                    IFNULL(SUM(pg.monto_pagado), 0) as total_monto
+                                FROM socios s
+                                JOIN predios p ON s.id = p.socio_id
+                                JOIN localidades l ON p.localidad_id = l.id
+                                LEFT JOIN pagos pg ON p.id = pg.predio_id 
+                                     AND ((pg.anio * 100) + pg.mes) >= %s 
+                                     AND ((pg.anio * 100) + pg.mes) <= %s
+                                GROUP BY s.id, s.no_socio, s.nombre_completo, s.telefono, l.comunidad, l.estado, p.id, p.num_predio
+                                ORDER BY s.nombre_completo ASC, p.num_predio ASC
+                            """
+                            cursor.execute(sql_ex, (periodo_inicial_num, periodo_final_num))
+                            rows_export = cursor.fetchall()
 
-                        for col_num in range(1, len(headers) + 1):
-                            cell = ws.cell(row=4, column=col_num)
-                            cell.fill = fill_header
-                            cell.font = font_header
-                            cell.alignment = Alignment(horizontal="center" if col_num in [1, 3, 5, 6, 7] else "left" if col_num in [2, 4] else "right")
+                        if rows_export:
+                            ws.merge_cells("A1:H1")
+                            ws["A1"] = "ANMIRA - REPORTES DE CONTROL DE CUOTAS Y PREDIOS (RESUMIDO)"
+                            ws["A1"].font = font_title; ws["A1"].fill = fill_title
 
-                        row_start = 5
-                        for idx, r in enumerate(rows_export):
-                            current_row = row_start + idx
-                            val_cuotas = int(r['cuotas_pagadas']) if r['cuotas_pagadas'] else 0
-                            val_monto = float(r['total_monto']) if r['total_monto'] else 0.0
+                            ws.merge_cells("A2:H2")
+                            ws["A2"] = f"Rango Consultado: {rango_texto} — Fecha Emisión: {datetime.now().strftime('%d/%m/%Y %H:%M hrs')}"
+                            ws["A2"].font = Font(name="Calibri", size=10, italic=True, color="666666")
 
-                            ws.append([
-                                str(r['no_socio']), str(r['socio']), str(r['telefono']),
-                                str(r['comunidad']), str(r['estado']), str(r['num_predio']),
-                                val_cuotas, val_monto
-                            ])
+                            headers = ["Clave Socio", "Nombre del Socio", "Teléfono", "Ubicación / Comunidad", "Estado", "Número Predio", "Cuotas Pagadas en Rango", "Total Aportado en Rango ($)"]
+                            ws.append([])
+                            ws.append(headers)
 
-                            is_even = (idx % 2 == 0)
+                            for col_num in range(1, len(headers) + 1):
+                                cell = ws.cell(row=4, column=col_num)
+                                cell.fill = fill_header; cell.font = font_header
+                                cell.alignment = Alignment(horizontal="center" if col_num in [1, 3, 5, 6, 7] else "left" if col_num in [2, 4] else "right")
+
+                            row_start = 5
+                            for idx, r in enumerate(rows_export):
+                                current_row = row_start + idx
+                                val_cuotas = int(r['cuotas_pagadas']) if r['cuotas_pagadas'] else 0
+                                val_monto = float(r['total_monto']) if r['total_monto'] else 0.0
+
+                                ws.append([
+                                    str(r['no_socio']), str(r['socio']), str(r['telefono']),
+                                    str(r['comunidad']), str(r['estado']), str(r['num_predio']),
+                                    val_cuotas, val_monto
+                                ])
+
+                                is_even = (idx % 2 == 0)
+                                for c_idx in range(1, 9):
+                                    cell = ws.cell(row=current_row, column=c_idx)
+                                    cell.font = font_data; cell.border = border_thin
+                                    if is_even: cell.fill = fill_zebra
+                                    if c_idx in [1, 3, 5, 6]: cell.alignment = Alignment(horizontal="center")
+                                    elif c_idx == 7: cell.alignment = Alignment(horizontal="center"); cell.number_format = '#,##0'
+                                    elif c_idx == 8: cell.alignment = Alignment(horizontal="right"); cell.number_format = '"$"#,##0.00'
+
+                            total_row_idx = row_start + len(rows_export)
+                            ws.cell(row=total_row_idx, column=1, value="TOTAL GENERAL EN RANGO")
+                            ws.merge_cells(start_row=total_row_idx, start_column=1, end_row=total_row_idx, end_column=6)
+                            ws.cell(row=total_row_idx, column=7, value=f"=SUM(G{row_start}:G{total_row_idx-1})")
+                            ws.cell(row=total_row_idx, column=8, value=f"=SUM(H{row_start}:H{total_row_idx-1})")
+
                             for c_idx in range(1, 9):
-                                cell = ws.cell(row=current_row, column=c_idx)
-                                cell.font = font_data
-                                cell.border = border_thin
-                                if is_even: cell.fill = fill_zebra
-                                if c_idx in [1, 3, 5, 6]: cell.alignment = Alignment(horizontal="center")
-                                elif c_idx == 7: cell.alignment = Alignment(horizontal="center"); cell.number_format = '#,##0'
+                                cell = ws.cell(row=total_row_idx, column=c_idx)
+                                cell.font = font_total; cell.fill = fill_total; cell.border = border_thin
+                                if c_idx == 7: cell.alignment = Alignment(horizontal="center"); cell.number_format = '#,##0'
                                 elif c_idx == 8: cell.alignment = Alignment(horizontal="right"); cell.number_format = '"$"#,##0.00'
 
-                        total_row_idx = row_start + len(rows_export)
-                        ws.cell(row=total_row_idx, column=1, value="TOTAL GENERAL")
-                        ws.merge_cells(start_row=total_row_idx, start_column=1, end_row=total_row_idx, end_column=6)
-                        ws.cell(row=total_row_idx, column=7, value=f"=SUM(G{row_start}:G{total_row_idx-1})")
-                        ws.cell(row=total_row_idx, column=8, value=f"=SUM(H{row_start}:H{total_row_idx-1})")
+                    # =========================================================
+                    # OPCIÓN 2: REPORTE DETALLADO MATRIZ POR RANGO DE FECHAS
+                    # =========================================================
+                    else:
+                        ws.title = "Matriz Detallada Rango"
 
-                        for c_idx in range(1, 9):
-                            cell = ws.cell(row=total_row_idx, column=c_idx)
-                            cell.font = font_total; cell.fill = fill_total; cell.border = border_thin
-                            if c_idx == 7: cell.alignment = Alignment(horizontal="center"); cell.number_format = '#,##0'
-                            elif c_idx == 8: cell.alignment = Alignment(horizontal="right"); cell.number_format = '"$"#,##0.00'
+                        # Construir la lista de periodos (Mes/Año) dinámicamente
+                        periodos_lista = []
+                        curr_a = anio_inicio
+                        curr_m = mes_inicio
 
-                # =========================================================
-                # OPCIÓN 2: REPORTE DETALLADO MES A MES (MATRIZ ENE-DIC)
-                # =========================================================
-                else:
-                    ws.title = f"Matriz Pagos {anio_ex}"
+                        while (curr_a * 100 + curr_m) <= periodo_final_num:
+                            periodos_lista.append((curr_a, curr_m))
+                            curr_m += 1
+                            if curr_m > 12:
+                                curr_m = 1
+                                curr_a += 1
 
-                    with conn.cursor() as cursor:
-                        # 1. Obtener socios y predios
-                        cursor.execute("""
-                            SELECT 
-                                p.id as predio_id,
-                                IFNULL(s.no_socio, 'S/C') as no_socio,
-                                s.nombre_completo as socio,
-                                IFNULL(s.telefono, 'Sin Teléfono') as telefono,
-                                l.comunidad,
-                                l.estado,
-                                p.num_predio
-                            FROM socios s
-                            JOIN predios p ON s.id = p.socio_id
-                            JOIN localidades l ON p.localidad_id = l.id
-                            ORDER BY s.nombre_completo ASC, p.num_predio ASC
-                        """)
-                        lista_predios = cursor.fetchall()
+                        with conn.cursor() as cursor:
+                            cursor.execute("""
+                                SELECT 
+                                    p.id as predio_id,
+                                    IFNULL(s.no_socio, 'S/C') as no_socio,
+                                    s.nombre_completo as socio,
+                                    IFNULL(s.telefono, 'Sin Teléfono') as telefono,
+                                    l.comunidad,
+                                    l.estado,
+                                    p.num_predio
+                                FROM socios s
+                                JOIN predios p ON s.id = p.socio_id
+                                JOIN localidades l ON p.localidad_id = l.id
+                                ORDER BY s.nombre_completo ASC, p.num_predio ASC
+                            """)
+                            lista_predios = cursor.fetchall()
 
-                        # 2. Obtener todos los pagos del año seleccionado
-                        cursor.execute("""
-                            SELECT pg.predio_id, pg.mes, pg.monto_pagado
-                            FROM pagos pg
-                            JOIN predios p ON pg.predio_id = p.id
-                            WHERE pg.anio = %s
-                        """, (anio_ex,))
-                        pagos_anio = cursor.fetchall()
+                            cursor.execute("""
+                                SELECT pg.predio_id, pg.anio, pg.mes, pg.monto_pagado
+                                FROM pagos pg
+                                JOIN predios p ON pg.predio_id = p.id
+                                WHERE ((pg.anio * 100) + pg.mes) >= %s 
+                                  AND ((pg.anio * 100) + pg.mes) <= %s
+                            """, (periodo_inicial_num, periodo_final_num))
+                            pagos_rango = cursor.fetchall()
 
-                    # Mapear pagos: (predio_id, mes) -> monto
-                    mapa_pagos = {(p['predio_id'], p['mes']): float(p['monto_pagado']) for p in pagos_anio}
+                        # Mapa: (predio_id, anio, mes) -> monto
+                        mapa_pagos = {(p['predio_id'], p['anio'], p['mes']): float(p['monto_pagado']) for p in pagos_rango}
 
-                    if lista_predios:
-                        ws.merge_cells("A1:R1")
-                        ws["A1"] = f"ANMIRA - MATRIZ DETALLADA DE PAGOS MES POR MES ({anio_ex})"
-                        ws["A1"].font = font_title; ws["A1"].fill = fill_title
+                        if lista_predios:
+                            total_columnas = 6 + len(periodos_lista) + 2
+                            letra_fin_encabezado = get_column_letter(total_columnas)
 
-                        ws.merge_cells("A2:R2")
-                        ws["A2"] = f"Año Ejercicio: {anio_ex} — Fecha Emisión: {datetime.now().strftime('%d/%m/%Y %H:%M hrs')}"
-                        ws["A2"].font = Font(name="Calibri", size=10, italic=True, color="666666")
+                            ws.merge_cells(f"A1:{letra_fin_encabezado}1")
+                            ws["A1"] = "ANMIRA - MATRIZ DETALLADA DE PAGOS POR RANGO DE FECHAS"
+                            ws["A1"].font = font_title; ws["A1"].fill = fill_title
 
-                        headers = ["Clave Socio", "Nombre del Socio", "Teléfono", "Ubicación", "Estado", "Número Predio"] + \
-                                  [MESES_NOMBRES[m][:3].upper() for m in range(1, 13)] + \
-                                  ["Total Cuotas", "Total Aportado ($)"]
-                        
-                        ws.append([])
-                        ws.append(headers)
+                            ws.merge_cells(f"A2:{letra_fin_encabezado}2")
+                            ws["A2"] = f"Rango Consultado: {rango_texto} — Fecha Emisión: {datetime.now().strftime('%d/%m/%Y %H:%M hrs')}"
+                            ws["A2"].font = Font(name="Calibri", size=10, italic=True, color="666666")
 
-                        for col_num in range(1, len(headers) + 1):
-                            cell = ws.cell(row=4, column=col_num)
-                            cell.fill = fill_header; cell.font = font_header
-                            cell.alignment = Alignment(horizontal="center" if col_num not in [2, 4] else "left")
+                            headers = ["Clave Socio", "Nombre del Socio", "Teléfono", "Ubicación", "Estado", "Número Predio"] + \
+                                      [f"{MESES_NOMBRES[m][:3].upper()}-{a}" for a, m in periodos_lista] + \
+                                      ["Total Cuotas", "Total Aportado ($)"]
+                            
+                            ws.append([])
+                            ws.append(headers)
 
-                        row_start = 5
-                        for idx, pr in enumerate(lista_predios):
-                            current_row = row_start + idx
-                            p_id = pr['predio_id']
+                            for col_num in range(1, len(headers) + 1):
+                                cell = ws.cell(row=4, column=col_num)
+                                cell.fill = fill_header; cell.font = font_header
+                                cell.alignment = Alignment(horizontal="center" if col_num not in [2, 4] else "left")
 
-                            fila = [
-                                str(pr['no_socio']), str(pr['socio']), str(pr['telefono']),
-                                str(pr['comunidad']), str(pr['estado']), str(pr['num_predio'])
-                            ]
+                            row_start = 5
+                            for idx, pr in enumerate(lista_predios):
+                                current_row = row_start + idx
+                                p_id = pr['predio_id']
 
-                            cuotas_p = 0
-                            monto_tot_p = 0.0
+                                fila = [
+                                    str(pr['no_socio']), str(pr['socio']), str(pr['telefono']),
+                                    str(pr['comunidad']), str(pr['estado']), str(pr['num_predio'])
+                                ]
 
-                            # Columnas Enero a Diciembre
-                            for m in range(1, 13):
-                                monto_m = mapa_pagos.get((p_id, m))
-                                if monto_m is not None:
-                                    fila.append(monto_m)
-                                    cuotas_p += 1
-                                    monto_tot_p += monto_m
-                                else:
-                                    fila.append(0)
+                                cuotas_p = 0
+                                monto_tot_p = 0.0
 
-                            fila.append(cuotas_p)
-                            fila.append(monto_tot_p)
-
-                            ws.append(fila)
-
-                            is_even = (idx % 2 == 0)
-                            for c_idx in range(1, 19):
-                                cell = ws.cell(row=current_row, column=c_idx)
-                                cell.font = font_data
-                                cell.border = border_thin
-                                if is_even: cell.fill = fill_zebra
-
-                                if c_idx in [1, 3, 5, 6]:
-                                    cell.alignment = Alignment(horizontal="center")
-                                elif 7 <= c_idx <= 18:
-                                    cell.alignment = Alignment(horizontal="right")
-                                    if cell.value > 0:
-                                        cell.fill = fill_pagado
-                                        cell.font = font_pagado
-                                        cell.number_format = '"$"#,##0'
+                                # Evaluar dinámicamente cada mes-año del rango
+                                for a, m in periodos_lista:
+                                    monto_m = mapa_pagos.get((p_id, a, m))
+                                    if monto_m is not None:
+                                        fila.append(monto_m)
+                                        cuotas_p += 1
+                                        monto_tot_p += monto_m
                                     else:
-                                        cell.number_format = '"-"'
+                                        fila.append(0)
+
+                                fila.append(cuotas_p)
+                                fila.append(monto_tot_p)
+
+                                ws.append(fila)
+
+                                is_even = (idx % 2 == 0)
+                                for c_idx in range(1, total_columnas + 1):
+                                    cell = ws.cell(row=current_row, column=c_idx)
+                                    cell.font = font_data; cell.border = border_thin
+                                    if is_even: cell.fill = fill_zebra
+
+                                    if c_idx in [1, 3, 5, 6]:
                                         cell.alignment = Alignment(horizontal="center")
-                                elif c_idx == 17:
-                                    cell.alignment = Alignment(horizontal="center")
-                                    cell.number_format = '#,##0'
-                                elif c_idx == 18:
+                                    elif 7 <= c_idx <= (6 + len(periodos_lista)):
+                                        if cell.value > 0:
+                                            cell.fill = fill_pagado
+                                            cell.font = font_pagado
+                                            cell.alignment = Alignment(horizontal="right")
+                                            cell.number_format = '"$"#,##0'
+                                        else:
+                                            cell.number_format = '"-"'
+                                            cell.alignment = Alignment(horizontal="center")
+                                    elif c_idx == total_columnas - 1:
+                                        cell.alignment = Alignment(horizontal="center")
+                                        cell.number_format = '#,##0'
+                                    elif c_idx == total_columnas:
+                                        cell.alignment = Alignment(horizontal="right")
+                                        cell.number_format = '"$"#,##0.00'
+
+                            # Totales generales por columna
+                            total_row_idx = row_start + len(lista_predios)
+                            ws.cell(row=total_row_idx, column=1, value="TOTAL GENERAL")
+                            ws.merge_cells(start_row=total_row_idx, start_column=1, end_row=total_row_idx, end_column=6)
+
+                            for col_m in range(7, total_columnas + 1):
+                                col_letra = get_column_letter(col_m)
+                                ws.cell(row=total_row_idx, column=col_m, value=f"=SUM({col_letra}{row_start}:{col_letra}{total_row_idx-1})")
+
+                            for c_idx in range(1, total_columnas + 1):
+                                cell = ws.cell(row=total_row_idx, column=c_idx)
+                                cell.font = font_total; cell.fill = fill_total; cell.border = border_thin
+                                if 7 <= c_idx <= (6 + len(periodos_lista)) or c_idx == total_columnas:
                                     cell.alignment = Alignment(horizontal="right")
                                     cell.number_format = '"$"#,##0.00'
+                                elif c_idx == total_columnas - 1:
+                                    cell.alignment = Alignment(horizontal="center")
+                                    cell.number_format = '#,##0'
 
-                        # Totales generales de la matriz
-                        total_row_idx = row_start + len(lista_predios)
-                        ws.cell(row=total_row_idx, column=1, value="TOTAL GENERAL")
-                        ws.merge_cells(start_row=total_row_idx, start_column=1, end_row=total_row_idx, end_column=6)
+                    # Auto-ajuste de ancho de columnas
+                    for col in ws.columns:
+                        max_len = 0
+                        col_letter = get_column_letter(col[0].column)
+                        for cell in col:
+                            if cell.row > 2 and cell.value is not None:
+                                max_len = max(max_len, len(str(cell.value)))
+                        ws.column_dimensions[col_letter].width = max(max_len + 3, 11)
 
-                        for col_m in range(7, 18):
-                            col_letra = get_column_letter(col_m)
-                            ws.cell(row=total_row_idx, column=col_m, value=f"=SUM({col_letra}{row_start}:{col_letra}{total_row_idx-1})")
+                    buffer = io.BytesIO()
+                    wb.save(buffer)
+                    buffer.seek(0)
 
-                        for c_idx in range(1, 19):
-                            cell = ws.cell(row=total_row_idx, column=c_idx)
-                            cell.font = font_total; cell.fill = fill_total; cell.border = border_thin
-                            if 7 <= c_idx <= 16 or c_idx == 18:
-                                cell.alignment = Alignment(horizontal="right")
-                                cell.number_format = '"$"#,##0.00'
-                            elif c_idx == 17:
-                                cell.alignment = Alignment(horizontal="center")
-                                cell.number_format = '#,##0'
+                    nombre_archivo = f"Reporte_Pagos_{anio_inicio}_{anio_fin}.xlsx"
 
-                # Auto-ajuste de ancho de columnas
-                for col in ws.columns:
-                    max_len = 0
-                    col_letter = get_column_letter(col[0].column)
-                    for cell in col:
-                        if cell.row > 2 and cell.value is not None:
-                            max_len = max(max_len, len(str(cell.value)))
-                    ws.column_dimensions[col_letter].width = max(max_len + 3, 11)
-
-                buffer = io.BytesIO()
-                wb.save(buffer)
-                buffer.seek(0)
-
-                str_nombre_tipo = "Resumido" if "Resumido" in tipo_reporte else "Detallado_Meses"
-                nombre_archivo = f"Reporte_Pagos_{str_nombre_tipo}_{anio_ex}.xlsx"
-
-                st.success("✅ ¡Reporte generado exitosamente con el formato seleccionado!")
-                st.download_button(
-                    label="📥 Descargar Reporte en Excel (.xlsx)",
-                    data=buffer.getvalue(),
-                    file_name=nombre_archivo,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-            except Exception as e:
-                st.error(f"Error al generar el archivo de Excel: {e}")
-            finally:
-                conn.close()
+                    st.success(f"✅ ¡Reporte generado con éxito para el rango: **{rango_texto}**!")
+                    st.download_button(
+                        label="📥 Descargar Reporte en Excel (.xlsx)",
+                        data=buffer.getvalue(),
+                        file_name=nombre_archivo,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"Error al generar el reporte de Excel: {e}")
+                finally:
+                    conn.close()
