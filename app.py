@@ -4,6 +4,17 @@ import pymysql.cursors
 import pandas as pd
 import re
 from datetime import datetime, date
+import streamlit as st
+
+# Inyectar CSS para ocultar el menú superior y el pie de página
+hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS CORPORATIVOS (ANMIRA)
