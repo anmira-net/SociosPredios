@@ -51,21 +51,26 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. CONEXIÓN A BASE DE DATOS (NEUBOX)
+# 2. CONEXIÓN A BASE DE DATOS (LECTURA SEGURA DESDE SECRETS)
 # ---------------------------------------------------------
-DB_CONFIG = {
-    "host": "svgr348.serverneubox.com.mx",
-    "user": "anmirane_admin",
-    "password": "AndreaMia2026+-",
-    "database": "anmirane_Socios",
-    "port": 3306,
-    "charset": "utf8mb4",
-    "connect_timeout": 10,
-    "cursorclass": pymysql.cursors.DictCursor
-}
-
 def get_connection():
-    return pymysql.connect(**DB_CONFIG)
+    # Intenta leer desde st.secrets si está disponible, de lo contrario usa valores por defecto
+    if hasattr(st, "secrets") and "mysql" in st.secrets:
+        db_conf = st.secrets["mysql"]
+    else:
+        st.error("❌ No se encontraron las credenciales de base de datos en los Secretos.")
+        st.stop()
+        
+    return pymysql.connect(
+        host=db_conf["host"],
+        user=db_conf["user"],
+        password=db_conf["password"],
+        database=db_conf["database"],
+        port=int(db_conf.get("port", 3306)),
+        charset="utf8mb4",
+        connect_timeout=10,
+        cursorclass=pymysql.cursors.DictCursor
+    )
 
 # ---------------------------------------------------------
 # 3. CONTROL DE SESIÓN Y LOGIN CON CONTROL DE LICENCIAS
